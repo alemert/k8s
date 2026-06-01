@@ -1,6 +1,6 @@
 MACHINES = etc/machines.txt
 
-.PHONY: all install-hosts
+.PHONY: all install-hosts deploy-ssl deploy-ssl-client
 
 all: install-hosts
 
@@ -30,28 +30,29 @@ install-hosts: etc/hosts
 ################################################################################
 # Handle SSL certificates
 ################################################################################
-cert = admin                     \
-       node-0 node-1             \
-       kube-proxy kube-scheduler \
-	   kube-controller-manager   \
-	   kube-api-server           \
-       service-accounts
+cert-admin = admin
+cert-client = node-0 node-1
+cert-server = kube-proxy kube-scheduler \
+              kube-controller-manager   \
+			  kube-api-server
+
+cert = $(cert-admin) $(cert-client) $(cert-server)
 
 ssl: $(patsubst %,ssl/%.crt,$(cert))
 
 ssl/:
-	@ echo "Creating directory $@ for SSL certificates"
+	@ echo "$@ creating directory for SSL certificates"
 	@ mkdir -p $@
 
 # ----------------------------------------------------------
 # Generate CA key and certificate.
 # ----------------------------------------------------------
 ssl/ca.key: | ssl/#
-	@ echo "Generating CA private key $@"
+	@ echo "$@ generating CA private key"
 	@ openssl genrsa -out $@ 4096
 
 ssl/ca.crt: ssl/ca.key etc/ca.conf
-	@ echo "Generating CA certificate $@"
+	@ echo "$@ generating CA certificate"
 	@ openssl req -x509 -new -sha512 -noenc \
 	    -key $< -days 3653                \
 	    -config $(word 2,$^)              \
@@ -61,14 +62,14 @@ ssl/ca.crt: ssl/ca.key etc/ca.conf
 # Generate client key(s) 
 # ----------------------------------------------------------
 ssl/%.key: | ssl/
-	@ echo "Generating client private key $@"
+	@ echo "$@ generating client private key"
 	@ openssl genrsa -out $@ 4096
 
 # ----------------------------------------------------------
 # Generate client certificate request(s) 
 # ----------------------------------------------------------
 ssl/%: ssl/%.key etc/ca.conf
-	@ echo "Generating client certificate request $@"
+	@ echo "$@ generating client certificate request"
 	@ openssl req -new -sha512   \
 	    -key $<                \
 	    -config $(word 2,$^)   \
@@ -79,7 +80,7 @@ ssl/%: ssl/%.key etc/ca.conf
 # Sign client certificate(s) with CA.
 # ----------------------------------------------------------
 ssl/%.crt: ssl/%.csr ssl/ca.crt ssl/ca.key
-	@ echo "Signing client certificate $@ with CA"
+	@ echo "$@ signing client certificate with CA"
 	@ openssl x509 -req -days 3653 -sha512 \
 		-copy_extensions copyall \
 	    -in $<                   \
@@ -87,3 +88,22 @@ ssl/%.crt: ssl/%.csr ssl/ca.crt ssl/ca.key
 	    -CAkey $(word 3,$^)      \
 	    -CAcreateserial          \
 	    -out $@
+
+deploy-ssl: deploy-ssl-client deploy-ssl-server
+
+deploy-ssl-client: deploy-ssl-node-crt-0 deploy-ssl-node-crt-1 \
+                   deploy-ssl-node-key-0 deploy-ssl-node-key-1 
+
+deploy-ssl-node-%: deploy-ssl-node-crt-% deploy-ssl-node-key-% deploy-ssl-node-ca-% 
+
+deploy-ssl-node-crt-%: ssl/node-%.crt
+	scp $< root@node-$*:/var/lib/kubelet/kubelet.crt
+
+deploy-ssl-node-key-%: ssl/node-%.key
+	scp $< root@node-$*:/var/lib/kubelet/kubelet.key
+
+deploy-ssl-node-ca-%: ssl/ca.crt
+	scp $< root@node-$*:/var/lib/kubelet/ca.crt 
+
+deploy-ssl-server: $(patsubst %,ssl/%.crt,$(cert-server)) $(patsubst %,ssl/%.key,$(cert-server)) ssl/ca.crt	
+	scp $^ root@server:~/
