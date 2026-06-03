@@ -215,3 +215,15 @@ deploy-kubeconfig-node-%: etc/node-%.kubeconfig etc/kube-proxy.kubeconfig
 
 deploy-kubeconfig-server: etc/admin.kubeconfig $(patsubst %,etc/%.kubeconfig,$(KUBE_COMPONENTS))
 	scp $^ root@server:~/
+
+################################################################################
+# data encryption config and key
+################################################################################
+#export ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+
+#The Encryption Config File
+
+#Create the encryption-config.yaml encryption config file:
+
+#envsubst < etc/encryption-config.yaml \
+  > encryption-config.yaml
