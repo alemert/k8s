@@ -3,7 +3,7 @@ MACHINES = etc/machines.txt
 .PHONY: all help install-hosts deploy-ssl deploy-ssl-client ssl kubeconfig
 .PRECIOUS: ssl/ca.key ssl/%.key
 
-all: install-hosts deploy-ssl 
+all: install-hosts deploy-ssl deploy-kubeconfig
 
 help: 
 	@ echo "Usage: make [target]"
@@ -12,6 +12,7 @@ help:
 	@ echo "  all           Generate and deploy /etc/hosts and SSL certificates"
 	@ echo "  install-hosts Generate and deploy /etc/hosts to all machines"
 	@ echo "  deploy-ssl    Generate and deploy SSL certificates to all machines"
+	@ echo "  deploy-kubeconfig Deploy kubeconfig files to all machines"
 	@ echo "  help          Display this help message"
 	@ echo ""
 
@@ -136,11 +137,13 @@ KUBE_CONTROLLER_MANAGER_USER = system:kube-controller-manager
 KUBE_SCHEDULER_USER = system:kube-scheduler
 KUBE_ADMIN_USER = admin
 
-kubeconfig: etc/node-0.kubeconfig etc/node-1.kubeconfig        \
-			etc/kube-proxy.kubeconfig                          \
-						etc/kube-controller-manager.kubeconfig \
-						etc/kube-scheduler.kubeconfig          \
-						etc/admin.kubeconfig
+KUBE_COMPONENTS = kube-proxy kube-controller-manager kube-scheduler
+
+kubeconfig: etc/node-0.kubeconfig etc/node-1.kubeconfig \
+			etc/kube-proxy.kubeconfig                   \
+			etc/kube-controller-manager.kubeconfig      \
+			etc/kube-scheduler.kubeconfig               \
+			etc/admin.kubeconfig
 
 etc/node-%.kubeconfig: ssl/ca.crt ssl/node-%.crt ssl/node-%.key
 	@ host=$(basename $(notdir $(word 2,$^)));           \
@@ -160,67 +163,25 @@ etc/node-%.kubeconfig: ssl/ca.crt ssl/node-%.crt ssl/node-%.key
 	              --user=$(KUBE_NODE_USER_PREFIX):$$host \
 	              --kubeconfig=$@
 
-etc/kube-proxy.kubeconfig: ssl/ca.crt                 \
-                           ssl/kube-proxy.crt ssl/kube-proxy.key
-	@ echo "$@ generating kubeconfig for kube-proxy"
-	kubectl config set-cluster $(KUBE_CLUSTER_NAME)   \
-	--certificate-authority=$<                        \
-	--embed-certs=true                                \
-	--server=$(KUBE_API_SERVER)                       \
-	--kubeconfig=$@
-	kubectl config set-credentials $(KUBE_PROXY_USER) \
-    --client-certificate=$(word 2,$^)                 \
-    --client-key=$(word 3,$^)                         \
-    --embed-certs=true                                \
-	    --kubeconfig=$@
-	kubectl config set-context $(KUBECONFIG_CONTEXT) \
-    --cluster=$(KUBE_CLUSTER_NAME)                   \
-    --user=$(KUBE_PROXY_USER)                        \
-	    --kubeconfig=$@
-	kubectl config use-context $(KUBECONFIG_CONTEXT) \
-	    --kubeconfig=$@
-
-etc/kube-controller-manager.kubeconfig: ssl/ca.crt      \
-						ssl/kube-controller-manager.crt \
-						ssl/kube-controller-manager.key
-	@ echo "$@ generating kubeconfig for kube-controller-manager"
-	kubectl config set-cluster $(KUBE_CLUSTER_NAME)  \
-	    --certificate-authority=$<                   \
-	    --embed-certs=true                           \
-	    --server=$(KUBE_API_SERVER)                  \
-	    --kubeconfig=$@
-	kubectl config set-credentials $(KUBE_CONTROLLER_MANAGER_USER) \
-	    --client-certificate=$(word 2,$^)            \
-	    --client-key=$(word 3,$^)                    \
-	    --embed-certs=true                           \
-	    --kubeconfig=$@
-	kubectl config set-context $(KUBECONFIG_CONTEXT) \
-	    --cluster=$(KUBE_CLUSTER_NAME)               \
-	    --user=$(KUBE_CONTROLLER_MANAGER_USER)       \
-	    --kubeconfig=$@
-	kubectl config use-context $(KUBECONFIG_CONTEXT) \
-	    --kubeconfig=$@
-
-etc/kube-scheduler.kubeconfig: ssl/ca.crt \
-								ssl/kube-scheduler.crt \
-								ssl/kube-scheduler.key
-	@ echo "$@ generating kubeconfig for kube-scheduler"
-	kubectl config set-cluster $(KUBE_CLUSTER_NAME) \
-	    --certificate-authority=$<                  \
-	    --embed-certs=true                          \
-	    --server=$(KUBE_API_SERVER) \
-	    --kubeconfig=$@
-	kubectl config set-credentials $(KUBE_SCHEDULER_USER) \
-	    --client-certificate=$(word 2,$^) \
-	    --client-key=$(word 3,$^) \
-	    --embed-certs=true    \
-	    --kubeconfig=$@
-	kubectl config set-context $(KUBECONFIG_CONTEXT) \
-	    --cluster=$(KUBE_CLUSTER_NAME) \
-	    --user=$(KUBE_SCHEDULER_USER) \
-	    --kubeconfig=$@
-	kubectl config use-context $(KUBECONFIG_CONTEXT) \
-	    --kubeconfig=$@
+$(patsubst %,etc/%.kubeconfig,$(KUBE_COMPONENTS)): etc/%.kubeconfig: ssl/ca.crt ssl/%.crt ssl/%.key
+	@ user="system:$*"; \
+	@ echo "$@ generating kubeconfig for $*"; \
+	  kubectl config set-cluster $(KUBE_CLUSTER_NAME) \
+	      --certificate-authority=$< \
+	      --embed-certs=true \
+	      --server=$(KUBE_API_SERVER) \
+	      --kubeconfig=$@; \
+	  kubectl config set-credentials $$user \
+	      --client-certificate=$(word 2,$^) \
+	      --client-key=$(word 3,$^) \
+	      --embed-certs=true \
+	      --kubeconfig=$@; \
+	  kubectl config set-context $(KUBECONFIG_CONTEXT) \
+	      --cluster=$(KUBE_CLUSTER_NAME) \
+	      --user=$$user \
+	      --kubeconfig=$@; \
+	  kubectl config use-context $(KUBECONFIG_CONTEXT) \
+	      --kubeconfig=$@
 
 etc/admin.kubeconfig: ssl/ca.crt \
 						ssl/admin.crt \
@@ -243,4 +204,14 @@ etc/admin.kubeconfig: ssl/ca.crt \
 	kubectl config use-context $(KUBECONFIG_CONTEXT) \
 	    --kubeconfig=$@
 
-# bis hier; next: distribute kubeconfig files to all machines
+deploy-kubeconfig: deploy-kubeconfig-worker \
+                   deploy-kubeconfig-server
+
+deploy-kubeconfig-worker: deploy-kubeconfig-node-0 deploy-kubeconfig-node-1
+
+deploy-kubeconfig-node-%: etc/node-%.kubeconfig etc/kube-proxy.kubeconfig
+	scp $< root@node-$*:/var/lib/kubelet/kubeconfig 
+	scp $(word 2,$^) root@node-$*:/var/lib/kube-proxy/kubeconfig
+
+deploy-kubeconfig-server: etc/admin.kubeconfig $(patsubst %,etc/%.kubeconfig,$(KUBE_COMPONENTS))
+	scp $^ root@server:~/
