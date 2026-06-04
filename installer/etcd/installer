@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -e   # bail on error
+
+# install etcdctl & etcd
+mv etcdctl /usr/local/bin/etcdctl
+mv etcd    /usr/local/bin/etcd
+
+# install systemd unit file for etcd
+mv etcd.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable etcd
+systemctl start etcd

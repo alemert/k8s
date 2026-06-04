@@ -1,9 +1,9 @@
-MACHINES = etc/machines.txt
+MACHINES = etc/cfg/machines.txt
 
 .PHONY: all help install-hosts deploy-ssl deploy-ssl-client ssl kubeconfig
-.PRECIOUS: ssl/ca.key ssl/%.key
+.PRECIOUS: var/ssl/ca.key var/ssl/%.key
 
-all: install-hosts deploy-ssl deploy-kubeconfig
+all: install-hosts deploy-ssl deploy-kubeconfig deploy-encryption
 
 help: 
 	@ echo "Usage: make [target]"
@@ -50,23 +50,23 @@ cert-server = kube-proxy kube-scheduler \
 
 cert = $(cert-admin) $(cert-client) $(cert-server)
 
-ssl-key-targets := $(patsubst %,ssl/%.key,$(cert))
-.SECONDARY: ssl/ca.key $(ssl-key-targets)
+ssl-key-targets := $(patsubst %,var/ssl/%.key,$(cert))
+.SECONDARY: var/ssl/ca.key $(ssl-key-targets)
 
-ssl: $(patsubst %,ssl/%.crt,$(cert))
+ssl: $(patsubst %,var/ssl/%.crt,$(cert))
 
-ssl/:
+var/ssl/:
 	@ echo "$@ creating directory for SSL certificates"
 	@ mkdir -p $@
 
 # ----------------------------------------------------------
 # Generate CA key and certificate.
 # ----------------------------------------------------------
-ssl/ca.key: | ssl/
+var/ssl/ca.key: | var/ssl/
 	@ echo "$@ generating CA private key"
 	@ openssl genrsa -out $@ 4096
 
-ssl/ca.crt: ssl/ca.key etc/ca.conf
+var/ssl/ca.crt: var/ssl/ca.key etc/cfg/ca.conf
 	@ echo "$@ generating CA certificate"
 	@ openssl req -x509 -new -sha512 -noenc \
 	    -key $< -days 3653                \
@@ -76,14 +76,14 @@ ssl/ca.crt: ssl/ca.key etc/ca.conf
 # ----------------------------------------------------------
 # Generate client key(s) 
 # ----------------------------------------------------------
-ssl/%.key: | ssl/
+var/ssl/%.key: | var/ssl/
 	@ echo "$@ generating client private key"
 	@ openssl genrsa -out $@ 4096
 
 # ----------------------------------------------------------
 # Generate client certificate request(s) 
 # ----------------------------------------------------------
-ssl/%.csr: ssl/%.key etc/ca.conf
+var/ssl/%.csr: var/ssl/%.key etc/cfg/ca.conf
 	@ echo "$@ generating client certificate request"
 	@ openssl req -new -sha512   \
 	    -key $<                \
@@ -94,7 +94,7 @@ ssl/%.csr: ssl/%.key etc/ca.conf
 # ----------------------------------------------------------
 # Sign client certificate(s) with CA.
 # ----------------------------------------------------------
-ssl/%.crt: ssl/%.csr ssl/ca.crt ssl/ca.key
+var/ssl/%.crt: var/ssl/%.csr var/ssl/ca.crt var/ssl/ca.key
 	@ echo "$@ signing client certificate with CA"
 	@ openssl x509 -req -days 3653 -sha512 \
 		-copy_extensions copyall \
@@ -111,16 +111,16 @@ deploy-ssl-client: deploy-ssl-node-crt-0 deploy-ssl-node-crt-1 \
 
 deploy-ssl-node-%: deploy-ssl-node-crt-% deploy-ssl-node-key-% deploy-ssl-node-ca-% 
 
-deploy-ssl-node-crt-%: ssl/node-%.crt
+deploy-ssl-node-crt-%: var/ssl/node-%.crt
 	scp $< root@node-$*:/var/lib/kubelet/kubelet.crt
 
-deploy-ssl-node-key-%: ssl/node-%.key
+deploy-ssl-node-key-%: var/ssl/node-%.key
 	scp $< root@node-$*:/var/lib/kubelet/kubelet.key
 
-deploy-ssl-node-ca-%: ssl/ca.crt
+deploy-ssl-node-ca-%: var/ssl/ca.crt
 	scp $< root@node-$*:/var/lib/kubelet/ca.crt 
 
-deploy-ssl-server: $(patsubst %,ssl/%.crt,$(cert-server)) $(patsubst %,ssl/%.key,$(cert-server)) ssl/ca.crt	
+deploy-ssl-server: $(patsubst %,var/ssl/%.crt,$(cert-server)) $(patsubst %,var/ssl/%.key,$(cert-server)) var/ssl/ca.crt	
 	scp $^ root@server:~/
 
 ################################################################################
@@ -139,13 +139,13 @@ KUBE_ADMIN_USER = admin
 
 KUBE_COMPONENTS = kube-proxy kube-controller-manager kube-scheduler
 
-kubeconfig: etc/node-0.kubeconfig etc/node-1.kubeconfig \
-			etc/kube-proxy.kubeconfig                   \
-			etc/kube-controller-manager.kubeconfig      \
-			etc/kube-scheduler.kubeconfig               \
-			etc/admin.kubeconfig
+kubeconfig: var/kube/node-0.kubeconfig var/kube/node-1.kubeconfig \
+			var/kube/kube-proxy.kubeconfig                   \
+			var/kube/kube-controller-manager.kubeconfig      \
+			var/kube/kube-scheduler.kubeconfig               \
+			var/kube/admin.kubeconfig
 
-etc/node-%.kubeconfig: ssl/ca.crt ssl/node-%.crt ssl/node-%.key
+var/kube/node-%.kubeconfig: var/ssl/ca.crt var/ssl/node-%.crt var/ssl/node-%.key
 	@ host=$(basename $(notdir $(word 2,$^)));           \
 	  echo "$@ generating kubeconfig for $$host";        \
 	  kubectl config set-cluster $(KUBE_CLUSTER_NAME)    \
@@ -163,7 +163,7 @@ etc/node-%.kubeconfig: ssl/ca.crt ssl/node-%.crt ssl/node-%.key
 	              --user=$(KUBE_NODE_USER_PREFIX):$$host \
 	              --kubeconfig=$@
 
-$(patsubst %,etc/%.kubeconfig,$(KUBE_COMPONENTS)): etc/%.kubeconfig: ssl/ca.crt ssl/%.crt ssl/%.key
+$(patsubst %,var/kube/%.kubeconfig,$(KUBE_COMPONENTS)): var/kube/%.kubeconfig: var/ssl/ca.crt var/ssl/%.crt var/ssl/%.key
 	@ user="system:$*"; \
 	@ echo "$@ generating kubeconfig for $*"; \
 	  kubectl config set-cluster $(KUBE_CLUSTER_NAME) \
@@ -183,9 +183,9 @@ $(patsubst %,etc/%.kubeconfig,$(KUBE_COMPONENTS)): etc/%.kubeconfig: ssl/ca.crt 
 	  kubectl config use-context $(KUBECONFIG_CONTEXT) \
 	      --kubeconfig=$@
 
-etc/admin.kubeconfig: ssl/ca.crt \
-						ssl/admin.crt \
-						ssl/admin.key
+var/kube/admin.kubeconfig: var/ssl/ca.crt \
+						var/ssl/admin.crt \
+						var/ssl/admin.key
 	@ echo "$@ generating kubeconfig for admin"
 	kubectl config set-cluster $(KUBE_CLUSTER_NAME) \
 	    --certificate-authority=$< \
@@ -209,21 +209,21 @@ deploy-kubeconfig: deploy-kubeconfig-worker \
 
 deploy-kubeconfig-worker: deploy-kubeconfig-node-0 deploy-kubeconfig-node-1
 
-deploy-kubeconfig-node-%: etc/node-%.kubeconfig etc/kube-proxy.kubeconfig
+deploy-kubeconfig-node-%: var/kube/node-%.kubeconfig var/kube/kube-proxy.kubeconfig
 	scp $< root@node-$*:/var/lib/kubelet/kubeconfig 
 	scp $(word 2,$^) root@node-$*:/var/lib/kube-proxy/kubeconfig
 
-deploy-kubeconfig-server: etc/admin.kubeconfig $(patsubst %,etc/%.kubeconfig,$(KUBE_COMPONENTS))
+deploy-kubeconfig-server: var/kube/admin.kubeconfig $(patsubst %,var/kube/%.kubeconfig,$(KUBE_COMPONENTS))
 	scp $^ root@server:~/
 
 ################################################################################
 # data encryption config and key
 ################################################################################
-#export ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+var/encrypt/encryption-config.yaml: etc/cfg/encryption-config.yaml
+	@ echo "$@ generating encryption config"
+	@ mkdir -p $(dir $@)
+	export ENCRYPTION_KEY=$$(head -c 32 /dev/urandom | base64); \
+	envsubst < $< >$@
 
-#The Encryption Config File
-
-#Create the encryption-config.yaml encryption config file:
-
-#envsubst < etc/encryption-config.yaml \
-  > encryption-config.yaml
+deploy-encryption: var/encrypt/encryption-config.yaml
+	scp $< root@server:~/ 
