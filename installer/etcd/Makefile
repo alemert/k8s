@@ -8,6 +8,10 @@ etcdinstaller : selfinstall arch.tar.gz
 	cat $^ > $@
 	chmod 755 $@
 
+selfinstall: ../selfinstall
+	PRJ=etcd envsubst '$$PRJ' < $< > $@
+
+
 arch.tar.gz : $(SRC) installer
 	date "+etcdinstaller %Y-%m-%d" > version
 	tar czf $@ $^ version

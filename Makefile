@@ -227,3 +227,17 @@ var/encrypt/encryption-config.yaml: etc/cfg/encryption-config.yaml
 
 deploy-encryption: var/encrypt/encryption-config.yaml
 	scp $< root@server:~/ 
+
+installer: installer-etc 
+
+installer-etc: 
+	$(MAKE) -C installer/etcd
+	scp installer/etcd/etcdinstaller server:~/
+	ssh server 'chmod 755 ~/etcdinstaller'
+	ssh server '~/etcdinstaller'
+
+installer-control: 
+	$(MAKE) -C installer/control
+	scp installer/control/controlinstaller server:~/
+	ssh server 'chmod 755 ~/controlinstaller'
+	ssh server '~/controlinstaller'

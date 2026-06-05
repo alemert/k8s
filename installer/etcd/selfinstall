@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PRJ="etcd"
-echo "${PRJ} selfextract installer"
+echo "etcd selfextract installer"
 
 FILE="arch"
 
@@ -22,7 +22,7 @@ if ! ( cd "${TMP}" && bash ./installer "$@" ); then
   exit 1
 fi
 
-echo "${PRJ} installer complete"
+echo "etcd installer complete"
 echo ""
 
 # Exit from the script with success (0)

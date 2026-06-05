@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set -e   # bail on error
+
+################################################################################
+# create directories
+################################################################################
+
+# create directories for control plane components
+install -d -m 755 /etc/kubernetes/config
+
+# create directory for kubelet to read kube-apiserver's TLS certs
+install -d -m 755 /var/lib/kubernetes  
+
+################################################################################
+# install control plane components
+################################################################################
+
+# install control plane binaries
+install -m 755 kube-apiserver          /usr/local/bin/kube-apiserver
+install -m 755 kube-controller-manager /usr/local/bin/kube-controller-manager
+install -m 755 kube-scheduler          /usr/local/bin/kube-scheduler
+install -m 755 kubectl                 /usr/local/bin/kubectl
+
+# install tls certs for kube-apiserver
+install -m 644 ca.crt /etc/kubernetes/config/ca.crt 
+install -m 644 ca.key /etc/kubernetes/config/ca.key
+
+install -m 644 kube-api-server.crt /etc/kubernetes/config/kube-apiserver.crt
+install -m 644 kube-api-server.key /etc/kubernetes/config/kube-apiserver.key
+
+install -m 644 service-account.crt /etc/kubernetes/config/service-account.crt
+install -m 644 service-account.key /etc/kubernetes/config/service-account.key
+
+install -m 644 encryption-config.yaml /etc/kubernetes/config/encryption-config.yaml 
+
+install -m 644 kube-controller-manager.kubeconfig /var/lib/kubernetes/kube-controller-manager.kubeconfig
+install -m 644 kube-scheduler.kubeconfig /var/lib/kubernetes/kube-scheduler.kubeconfig
+
+# install kube-scheduler configuration
+install -m 644 kube-scheduler.yaml /etc/kubernetes/config/kube-scheduler.yaml
+
+
+# install systemd unit files
+install -m 644 kube-apiserver.service          /etc/systemd/system/
+install -m 644 kube-controller-manager.service /etc/systemd/system/
+install -m 644 kube-scheduler.service          /etc/systemd/system/
+
+# reload systemd
+systemctl daemon-reload
+
+# enable services
+systemctl enable kube-apiserver
+systemctl enable kube-controller-manager
+systemctl enable kube-scheduler
+
+# start services
+systemctl start kube-apiserver
+systemctl start kube-controller-manager
+systemctl start kube-scheduler

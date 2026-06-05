@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+
+PRJ="${PRJ}"
+echo "${PRJ} selfextract installer"
+
+FILE="arch"
+
+# Create destination folder and ensure it is always cleaned up
+TMP=$(mktemp -d /tmp/selfextract.XXXXXX)
+trap 'rm -rf "${TMP}"' EXIT
+
+# Find __ARCHIVE__ marker, read archive content and decompress it
+ARCHIVE=$(awk '/^__ARCHIVE__/ {print NR + 1; exit 0; }' "${0}")
+tail -n "+${ARCHIVE}" "${0}" > "${TMP}/${FILE}"
+tar -xzf "${TMP}/${FILE}" -C "${TMP}"
+rm -f "${TMP}/${FILE}"
+
+# Run the bundled installer from the extracted directory
+if ! ( cd "${TMP}" && bash ./installer "$@" ); then
+  echo "installation failed" >&2
+  exit 1
+fi
+
+echo "${PRJ} installer complete"
+echo ""
+
+# Exit from the script with success (0)
+exit 0
+
+__ARCHIVE__
