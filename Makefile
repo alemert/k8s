@@ -1,5 +1,14 @@
 MACHINES = etc/cfg/machines.txt
 
+# SSH/SCP wrappers for lab machines that are frequently rebuilt.
+# Host keys change on every rebuild, so we skip strict host-key checking
+# and avoid polluting the real ~/.ssh/known_hosts (no MITM concern here).
+SSH_OPTS = -o StrictHostKeyChecking=no \
+           -o UserKnownHostsFile=/dev/null \
+           -o LogLevel=ERROR
+SSH = ssh $(SSH_OPTS)
+SCP = scp $(SSH_OPTS)
+
 .PHONY: all help install-hosts deploy-ssl deploy-ssl-client ssl kubeconfig
 .PRECIOUS: var/ssl/ca.key var/ssl/%.key
 
@@ -36,7 +45,7 @@ etc/hosts: $(MACHINES)
 # ----------------------------------------------------------
 install-hosts: etc/hosts
 	for IP in $$(awk 'NF && $$1 !~ /^#/{print $$1}' $<); do      \
-		ssh root@$$IP 'cat >> /etc/hosts' < $<; \
+		$(SSH) root@$$IP 'cat >> /etc/hosts' < $<; \
 	done
 
 ################################################################################
@@ -46,7 +55,8 @@ cert-admin = admin
 cert-client = node-0 node-1
 cert-server = kube-proxy kube-scheduler \
               kube-controller-manager   \
-			  kube-api-server
+			  kube-api-server          \
+			  service-accounts
 
 cert = $(cert-admin) $(cert-client) $(cert-server)
 
@@ -88,7 +98,7 @@ var/ssl/%.csr: var/ssl/%.key etc/cfg/ca.conf
 	@ openssl req -new -sha512   \
 	    -key $<                \
 	    -config $(word 2,$^)   \
-	    -section admin         \
+	    -section $*            \
 	    -out $@
 
 # ----------------------------------------------------------
@@ -112,16 +122,16 @@ deploy-ssl-client: deploy-ssl-node-crt-0 deploy-ssl-node-crt-1 \
 deploy-ssl-node-%: deploy-ssl-node-crt-% deploy-ssl-node-key-% deploy-ssl-node-ca-% 
 
 deploy-ssl-node-crt-%: var/ssl/node-%.crt
-	scp $< root@node-$*:/var/lib/kubelet/kubelet.crt
+	$(SCP) $< root@node-$*:/var/lib/kubelet/kubelet.crt
 
 deploy-ssl-node-key-%: var/ssl/node-%.key
-	scp $< root@node-$*:/var/lib/kubelet/kubelet.key
+	$(SCP) $< root@node-$*:/var/lib/kubelet/kubelet.key
 
 deploy-ssl-node-ca-%: var/ssl/ca.crt
-	scp $< root@node-$*:/var/lib/kubelet/ca.crt 
+	$(SCP) $< root@node-$*:/var/lib/kubelet/ca.crt 
 
 deploy-ssl-server: $(patsubst %,var/ssl/%.crt,$(cert-server)) $(patsubst %,var/ssl/%.key,$(cert-server)) var/ssl/ca.crt	
-	scp $^ root@server:~/
+	$(SCP) $^ root@server:~/
 
 ################################################################################
 # kubeconfig	
@@ -228,7 +238,7 @@ var/encrypt/encryption-config.yaml: etc/cfg/encryption-config.yaml
 deploy-encryption: var/encrypt/encryption-config.yaml
 	scp $< root@server:~/ 
 
-installer: installer-etc 
+installer: installer-etc installer-control
 
 installer-etc: 
 	$(MAKE) -C installer/etcd
@@ -236,8 +246,9 @@ installer-etc:
 	ssh server 'chmod 755 ~/etcdinstaller'
 	ssh server '~/etcdinstaller'
 
-installer-control: 
+installer-control: ssl kubeconfig var/encrypt/encryption-config.yaml
 	$(MAKE) -C installer/control
 	scp installer/control/controlinstaller server:~/
 	ssh server 'chmod 755 ~/controlinstaller'
 	ssh server '~/controlinstaller'
+
