@@ -10,7 +10,7 @@ SSH = ssh $(SSH_OPTS)
 SCP = scp $(SSH_OPTS)
 
 .PHONY: all help install-hosts deploy-ssl deploy-ssl-client ssl kubeconfig
-.PRECIOUS: var/ssl/ca.key var/ssl/%.key
+.PRECIOUS: ssl/ca.key var/ssl/%.key
 
 all: install-hosts deploy-ssl deploy-kubeconfig deploy-encryption
 
@@ -61,7 +61,7 @@ cert-server = kube-proxy kube-scheduler \
 cert = $(cert-admin) $(cert-client) $(cert-server)
 
 ssl-key-targets := $(patsubst %,var/ssl/%.key,$(cert))
-.SECONDARY: var/ssl/ca.key $(ssl-key-targets)
+.SECONDARY: ssl/ca.key $(ssl-key-targets)
 
 ssl: $(patsubst %,var/ssl/%.crt,$(cert))
 
@@ -69,14 +69,18 @@ var/ssl/:
 	@ echo "$@ creating directory for SSL certificates"
 	@ mkdir -p $@
 
+ssl/:
+	@ echo "$@ creating directory for CA"
+	@ mkdir -p $@
+
 # ----------------------------------------------------------
 # Generate CA key and certificate.
 # ----------------------------------------------------------
-var/ssl/ca.key: | var/ssl/
+ssl/ca.key: | ssl/
 	@ echo "$@ generating CA private key"
 	@ openssl genrsa -out $@ 4096
 
-var/ssl/ca.crt: var/ssl/ca.key etc/cfg/ca.conf
+ssl/ca.crt: ssl/ca.key etc/cfg/ca.conf
 	@ echo "$@ generating CA certificate"
 	@ openssl req -x509 -new -sha512 -noenc \
 	    -key $< -days 3653                \
@@ -104,7 +108,7 @@ var/ssl/%.csr: var/ssl/%.key etc/cfg/ca.conf
 # ----------------------------------------------------------
 # Sign client certificate(s) with CA.
 # ----------------------------------------------------------
-var/ssl/%.crt: var/ssl/%.csr var/ssl/ca.crt var/ssl/ca.key
+var/ssl/%.crt: var/ssl/%.csr ssl/ca.crt ssl/ca.key
 	@ echo "$@ signing client certificate with CA"
 	@ openssl x509 -req -days 3653 -sha512 \
 		-copy_extensions copyall \
@@ -127,10 +131,10 @@ deploy-ssl-node-crt-%: var/ssl/node-%.crt
 deploy-ssl-node-key-%: var/ssl/node-%.key
 	$(SCP) $< root@node-$*:/var/lib/kubelet/kubelet.key
 
-deploy-ssl-node-ca-%: var/ssl/ca.crt
+deploy-ssl-node-ca-%: ssl/ca.crt
 	$(SCP) $< root@node-$*:/var/lib/kubelet/ca.crt 
 
-deploy-ssl-server: $(patsubst %,var/ssl/%.crt,$(cert-server)) $(patsubst %,var/ssl/%.key,$(cert-server)) var/ssl/ca.crt	
+deploy-ssl-server: $(patsubst %,var/ssl/%.crt,$(cert-server)) $(patsubst %,var/ssl/%.key,$(cert-server)) ssl/ca.crt	
 	$(SCP) $^ root@server:~/
 
 ################################################################################
@@ -155,7 +159,7 @@ kubeconfig: var/kube/node-0.kubeconfig var/kube/node-1.kubeconfig \
 			var/kube/kube-scheduler.kubeconfig               \
 			var/kube/admin.kubeconfig
 
-var/kube/node-%.kubeconfig: var/ssl/ca.crt var/ssl/node-%.crt var/ssl/node-%.key
+var/kube/node-%.kubeconfig: ssl/ca.crt var/ssl/node-%.crt var/ssl/node-%.key
 	@ host=$(basename $(notdir $(word 2,$^)));           \
 	  echo "$@ generating kubeconfig for $$host";        \
 	  kubectl config set-cluster $(KUBE_CLUSTER_NAME)    \
@@ -173,7 +177,7 @@ var/kube/node-%.kubeconfig: var/ssl/ca.crt var/ssl/node-%.crt var/ssl/node-%.key
 	              --user=$(KUBE_NODE_USER_PREFIX):$$host \
 	              --kubeconfig=$@
 
-$(patsubst %,var/kube/%.kubeconfig,$(KUBE_COMPONENTS)): var/kube/%.kubeconfig: var/ssl/ca.crt var/ssl/%.crt var/ssl/%.key
+$(patsubst %,var/kube/%.kubeconfig,$(KUBE_COMPONENTS)): var/kube/%.kubeconfig: ssl/ca.crt var/ssl/%.crt var/ssl/%.key
 	@ user="system:$*"; \
 	@ echo "$@ generating kubeconfig for $*"; \
 	  kubectl config set-cluster $(KUBE_CLUSTER_NAME) \
@@ -193,7 +197,7 @@ $(patsubst %,var/kube/%.kubeconfig,$(KUBE_COMPONENTS)): var/kube/%.kubeconfig: v
 	  kubectl config use-context $(KUBECONFIG_CONTEXT) \
 	      --kubeconfig=$@
 
-var/kube/admin.kubeconfig: var/ssl/ca.crt \
+var/kube/admin.kubeconfig: ssl/ca.crt \
 						var/ssl/admin.crt \
 						var/ssl/admin.key
 	@ echo "$@ generating kubeconfig for admin"
