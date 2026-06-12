@@ -1,0 +1,95 @@
+#!/bin/bash
+
+set -e   # bail on error
+
+################################################################################
+# create directories
+################################################################################
+
+# create directory for control plane certs, keys, kubeconfigs and configs
+install -d -m 755 /var/lib/kubelet/
+
+install -d -m 755 /var/lib/kube-proxy/
+
+################################################################################
+# generate and install kubelet client certificate
+################################################################################
+
+NODE=$(ip -j -r address                                  |\
+         jq -r '.[].addr_info[]                          |
+                select(.family=="inet" and .label!="lo") |
+                .local'                                  |\
+         awk -F. '{print $1}' )
+
+# generate the kubelet private key for the node.
+echo "generating kubelet client certificate for node ${NODE}"
+openssl genrsa -out kubelet.key 4096
+
+# generate a certificate signing request (CSR) for the node
+echo "generating kubelet client certificate signing request for node ${NODE}"
+openssl req -new -key "kubelet.key" -sha256 \
+    -config "ca.conf" -section ${NODE} \
+    -out "kubelet.csr"
+
+# sign the node client certificate with the CA
+echo "signing kubelet client certificate for node ${NODE}"
+openssl x509 -req -days 3653 -sha512 \
+	-copy_extensions copyall         \
+	-CAcreateserial                  \
+	-CA    ca.crt                    \
+	-CAkey ca.key                    \
+	-in    "kubelet.csr"             \
+	-out   "kubelet.crt"
+
+install -m 644 kubelet.crt /var/lib/kubelet/kubelet.crt
+install -m 600 kubelet.key /var/lib/kubelet/kubelet.key
+
+################################################################################
+# generate and install kubelet kubeconfig file
+################################################################################
+kubectl config set-cluster kubernetes-the-hard-way \
+    --certificate-authority=ca.crt \
+    --embed-certs=true \
+    --server=https://server.kubernetes.local:6443 \
+    --kubeconfig=kubeconfig
+
+  kubectl config set-credentials system:node:${NODE} \
+    --client-certificate=kubelet.crt \
+    --client-key=kubelet.key \
+    --embed-certs=true \
+    --kubeconfig=kubeconfig
+
+  kubectl config set-context default \
+    --cluster=kubernetes-the-hard-way \
+    --user=system:node:${NODE} \
+    --kubeconfig=kubeconfig
+
+  kubectl config use-context default \
+    --kubeconfig=kubeconfig
+
+install -m 644 kubeconfig /var/lib/kubelet/kubeconfig
+
+################################################################################
+# generate and install kube-proxy kubeconfig file
+################################################################################
+kubectl config set-cluster kubernetes-the-hard-way \
+    --certificate-authority=ca.crt \
+    --embed-certs=true \
+    --server=https://server.kubernetes.local:6443 \
+    --kubeconfig=kube-proxy.kubeconfig
+
+  kubectl config set-credentials system:kube-proxy \
+    --client-certificate=kube-proxy.crt \
+    --client-key=kube-proxy.key \
+    --embed-certs=true \
+    --kubeconfig=kube-proxy.kubeconfig
+
+  kubectl config set-context default \
+    --cluster=kubernetes-the-hard-way \
+    --user=system:kube-proxy \
+    --kubeconfig=kube-proxy.kubeconfig
+
+  kubectl config use-context default \
+    --kubeconfig=kube-proxy.kubeconfig
+
+install -m 644 kube-proxy.kubeconfig /var/lib/kube-proxy/kubeconfig 
