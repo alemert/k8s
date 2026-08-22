@@ -1,6 +1,8 @@
 # k8s
 
-This repository contains documentation for setting up a Kubernetes cluster on bare metal, based on https://github.com/alemert/kubernetes-the-hard-way/.
+This repository contains documentation for setting up a Kubernetes cluster on bare metal, based on [kubernetes the hard way](https://github.com/alemert/kubernetes-the-hard-way/).
+
+> **Hint:** For building and running the self-extracting cluster installers, see [installer/README.md](installer/README.md).
 
 ## Install OS on Bare Metal Machines
 
