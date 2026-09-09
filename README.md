@@ -19,7 +19,40 @@ Use the [ISO directory](iso/) to build bootable installer images and write them 
 - Confirm the machine powers off automatically after installation.
 
 ## 3. Download data
+This corresponds to the [Kubernetes the Hard Way jump host setup](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/02-jumpbox.md).
+
+1. [Download binaries](playbook/01-download.sh)
+
+### 3.1 Downloaded files
+
+The download script organizes the extracted binaries by the role of the machine that uses them:
+
+```text
+downloads/
+|-- client/
+|   |-- kubectl
+|   `-- etcdctl
+|-- controller/
+|   |-- etcd
+|   |-- kube-apiserver
+|   |-- kube-controller-manager
+|   `-- kube-scheduler
+|-- worker/
+|   |-- kubelet
+|   |-- kube-proxy
+|   |-- crictl
+|   |-- runc
+|   |-- containerd
+|   |-- containerd-shim-runc-v2
+|   `-- ctr
+`-- cni-plugins-linux-<arch>-v1.6.2.tgz
+```
+
+The CNI plugins archive is downloaded but is not extracted by the current script.
+
+## 4. Install K8S
+This corresponds to the [installer documentation](installer/README.md).
+
+## 5. Compute Resources_
 this corresponds to 
-- [k8s the hrardway - jumphost](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/02-jumpbox.md) 
-- [download binaries](playbook/01-download.sh)
-- [install client](playbook/02-install-client.sh)
+- [k8s the hrardway - compute resources](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/03-compute-resources.md)
