@@ -11,12 +11,13 @@ This repository contains documentation for setting up a Kubernetes cluster on ba
 Document the operating system installation steps for all target bare metal nodes in this chapter. This corresponds to [k8s the hardway - prereq](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/01-prerequisites.md).
 
 ### 2.1 Create ISO Images
-Use the [ISO directory](iso/) to build bootable installer images and write them to USB sticks.
+Use the [ISO directory](https://github.com/alemert/iso) to build bootable installer images and write them to USB sticks.
 - Insert the prepared USB stick into the target bare metal machine.
 - Power on the machine.
 - Select the USB device as the boot source.
 - Wait for the operating system installation to complete.
 - Confirm the machine powers off automatically after installation.
+This step also provisions the SSH public key in each node's `authorized_keys` file, as described in the [Kubernetes The Hard Way compute resources](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/03-compute-resources.md) documentation.
 
 ## 3. Download data
 This corresponds to the [Kubernetes the Hard Way jump host setup](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/02-jumpbox.md).
@@ -56,3 +57,4 @@ This corresponds to the [installer documentation](installer/README.md).
 ## 5. Compute Resources_
 this corresponds to 
 - [k8s the hrardway - compute resources](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/03-compute-resources.md)
+- Hostname distribution, as described in the [Kubernetes The Hard Way machine database](https://github.com/alemert/kubernetes-the-hard-way/blob/master/docs/03-compute-resources.md#machine-database), is handled by the top-level [Makefile](https://github.com/alemert/k8s/blob/main/Makefile#L28-L49).
