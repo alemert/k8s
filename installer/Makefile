@@ -1,4 +1,4 @@
-SUBDIRS = etcd control client-ssl
+SUBDIRS = config-host etcd control client-ssl
 
 .PHONY: all clean $(SUBDIRS)
 

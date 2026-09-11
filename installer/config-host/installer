@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -e
+
+SSH_OPTS=(
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null
+  -o LogLevel=ERROR
+)
+
+HOSTS_FILE=hosts
+
+{
+  echo ""
+  echo "# Kubernetes The Hard Way"
+  while read -r ip fqdn host subnet; do
+    [[ -z "${ip}" || "${ip}" == \#* ]] && continue
+    printf '%s %s %s\n' "${ip}" "${fqdn}" "${host}"
+  done < machines.txt
+} > "${HOSTS_FILE}"
+
+while read -r ip _; do
+  [[ -z "${ip}" || "${ip}" == \#* ]] && continue
+  ssh "${SSH_OPTS[@]}" "root@${ip}" 'cat >> /etc/hosts' < "${HOSTS_FILE}"
+done < machines.txt
