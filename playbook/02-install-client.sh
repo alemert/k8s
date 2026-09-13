@@ -1,3 +1,5 @@
-sudo cp downloads/client/kubectl /usr/local/bin/
-sudo chmod 755 /usr/local/bin/kubectl
+# Install kubectl for all users with executable permissions.
+sudo install -m 0755 downloads/client/kubectl /usr/local/bin/kubectl
+
+# Confirm that kubectl is installed and report its client version.
 sudo /usr/local/bin/kubectl version --client

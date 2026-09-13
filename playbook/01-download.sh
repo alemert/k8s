@@ -1,6 +1,14 @@
 ARCH=$(dpkg --print-architecture)
 echo "Detected architecture: ${ARCH}"
 
+echo "Downloading ${ARCH} download list"
+curl -L https://raw.githubusercontent.com/alemert/kubernetes-the-hard-way/master/downloads-${ARCH}.txt \
+    -o etc/downloads-${ARCH}.txt
+
+echo "Cleaning downloads directory"
+rm -rf downloads/*
+
+echo "Creating download directories"
 mkdir -p downloads/{client,cni-plugins,controller,worker}
 
 echo "Downloading k8s binaries "
@@ -8,7 +16,7 @@ wget --quiet                       \
      --show-progress               \
      --https-only                  \
      --timestamping                \
-	 --directory-prefix=downloads/ \
+     --directory-prefix=downloads/ \
      --input-file=etc/downloads-amd64.txt
 
 echo "Extracting k8s - cri-o binaries"
