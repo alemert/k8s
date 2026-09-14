@@ -20,7 +20,7 @@ SRC =  kube-apiserver         kube-controller-manager         kube-scheduler    
 
 .INTERMEDIATE : arch.tar.gz $(GENERATED)
 
-all : controlinstaller
+all : preflight controlinstaller
 
 controlinstaller : selfinstall arch.tar.gz
 	cat $^ > $@
@@ -28,6 +28,16 @@ controlinstaller : selfinstall arch.tar.gz
 
 selfinstall: ../selfinstall
 	PRJ=control envsubst '$$PRJ' < $< > $@
+
+preflight:
+	@for f in $(PROJ)/var/ssl/ca.crt $(PROJ)/var/ssl/ca.key \
+		$(PROJ)/var/kube/admin.kubeconfig $(PROJ)/var/encrypt/encryption-config.yaml; do \
+		if [ ! -f "$$f" ]; then \
+			echo "Missing required generated artifact: $$f" >&2; \
+			echo "Run the root project build first: make ssl kubeconfig var/encrypt/encryption-config.yaml" >&2; \
+			exit 1; \
+		fi; \
+	done
 
 # Copy generated artifacts from the project tree into the bundle directory.
 $(SSL_FILES): %: $(PROJ)/var/ssl/%

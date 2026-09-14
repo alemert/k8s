@@ -1,0 +1,61 @@
+#!/bin/bash
+
+set -e
+
+################################################################################
+# create directories
+################################################################################
+mkdir -p /root/.kube
+
+################################################################################
+# generate and install admin client certificate
+################################################################################
+
+echo "generating admin client certificate"
+openssl genrsa -out admin.key 4096
+
+echo "generating admin client certificate signing request"
+openssl req -new -key "admin.key" -sha256 \
+    -config "ca.conf" -section admin \
+    -out "admin.csr"
+
+echo "signing admin client certificate"
+openssl x509 -req -days 3653 -sha512 \
+    -copy_extensions copyall \
+    -CAcreateserial \
+    -CA    ca.crt \
+    -CAkey ca.key \
+    -in    "admin.csr" \
+    -out   "admin.crt"
+
+install -m 600 admin.key /root/.kube/admin.key
+install -m 644 admin.crt /root/.kube/admin.crt
+install -m 644 ca.crt /root/.kube/ca.crt
+
+################################################################################
+# generate and install admin kubeconfig file
+################################################################################
+kubectl config set-cluster kubernetes-the-hard-way \
+    --certificate-authority=/root/.kube/ca.crt \
+    --embed-certs=true \
+    --server=https://127.0.0.1:6443 \
+    --kubeconfig=/root/.kube/config
+
+kubectl config set-credentials admin \
+    --client-certificate=/root/.kube/admin.crt \
+    --client-key=/root/.kube/admin.key \
+    --embed-certs=true \
+    --kubeconfig=/root/.kube/config
+
+kubectl config set-context default \
+    --cluster=kubernetes-the-hard-way \
+    --user=admin \
+    --kubeconfig=/root/.kube/config
+
+kubectl config use-context default \
+    --kubeconfig=/root/.kube/config
+
+chmod 600 /root/.kube/admin.key
+chmod 644 /root/.kube/admin.crt /root/.kube/ca.crt /root/.kube/config
+
+echo "admin certificate and kubeconfig installed under /root/.kube"

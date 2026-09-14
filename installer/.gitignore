@@ -1,3 +1,5 @@
+admin-ssl/selfinstall
 client-ssl/selfinstall
+config-host/selfinstall
 control/selfinstall
 etcd/selfinstall

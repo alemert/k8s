@@ -12,6 +12,7 @@ install binaries, certificates, configs, and systemd units.
 | 1 | [`etcd`](etcd/)            | controller node | Installs the etcd key-value store that backs the control plane.         |
 | 2 | [`control`](control/)      | controller node | Installs the control plane: API server, controller manager, scheduler.  |
 | 3 | [`client-ssl`](client-ssl/)| worker node     | Generates and installs kubelet/kube-proxy client certs and kubeconfigs. |
+| 4 | [`admin-ssl`](admin-ssl/)| admin host      | Generates and installs the admin client certificate and kubeconfig.      |
 
 Each sub-project has its own `README.md` with details.
 
@@ -21,10 +22,11 @@ The projects must be installed in this order:
 
 1. **`etcd`** — the datastore must be running before the control plane starts.
 2. **`control`** — the API server connects to etcd; install after etcd is up.
-3. **`client-ssl`** — worker credentials, installed on each worker node once
+3. **`admin-ssl`** — admin client certificate and kubeconfig on the jumpbox/admin host.
+4. **`client-ssl`** — worker credentials, installed on each worker node once
    the control plane is reachable.
 
-Steps 1 and 2 target the controller node; step 3 targets each worker node.
+Steps 1 and 2 target the controller node; step 3 targets the admin host; step 4 targets each worker node.
 
 ## Build
 
@@ -33,6 +35,7 @@ Each sub-project builds independently:
 ```sh
 make -C etcd            # -> etcd/etcdinstaller
 make -C control         # -> control/controlinstaller
+make -C admin-ssl       # -> admin-ssl/admin-sslinstaller
 make -C client-ssl      # -> client-ssl/client-sslinstaller
 ```
 
@@ -48,6 +51,7 @@ the order above. For example:
 ```sh
 scp etcd/etcdinstaller           root@controller:~/  && ssh root@controller ./etcdinstaller
 scp control/controlinstaller     root@controller:~/  && ssh root@controller ./controlinstaller
+scp admin-ssl/admin-sslinstaller root@admin:~/      && ssh root@admin ./admin-sslinstaller
 scp client-ssl/client-sslinstaller root@worker:~/    && ssh root@worker ./client-sslinstaller
 ```
 

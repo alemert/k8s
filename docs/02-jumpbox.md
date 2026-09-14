@@ -43,3 +43,5 @@ downloads/
 call playbook/02-install-client.sh
 ```
 
+Next: [compute-resources](03-compute-resources.md)
+
